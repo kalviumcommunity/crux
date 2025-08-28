@@ -1,7 +1,19 @@
 import { buildPrompt } from "./prompts"
 
 export const aiUtils = {
-  generateContextualResponse: async (articleContent: string, userQuery: string): Promise<string> => {
+  generateContextualResponse: async (
+    articleContent: string, 
+    userQuery: string,
+    context: {
+      category?: string;
+      source?: string;
+      publishDate?: string;
+      userPreferences?: {
+        topics?: string[];
+        readingLevel?: 'basic' | 'intermediate' | 'advanced';
+      }
+    } = {}
+  ): Promise<string> => {
     try {
       const response = await fetch(
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=" +
@@ -16,7 +28,14 @@ export const aiUtils = {
               {
                 parts: [
                   {
-                    text: buildPrompt.forArticleContext(articleContent, userQuery),
+                    text: buildPrompt.forArticleContext(articleContent, userQuery, {
+                      articleMetadata: {
+                        category: context.category,
+                        source: context.source,
+                        publishDate: context.publishDate
+                      },
+                      userPreferences: context.userPreferences
+                    }),
                   },
                 ],
               },
@@ -41,7 +60,16 @@ export const aiUtils = {
     }
   },
 
-  generateGlobalResponse: async (userQuery: string): Promise<string> => {
+  generateGlobalResponse: async (
+    userQuery: string,
+    context: {
+      userPreferences?: {
+        topics?: string[];
+        readingLevel?: 'basic' | 'intermediate' | 'advanced';
+        preferredLanguage?: string;
+      }
+    } = {}
+  ): Promise<string> => {
     try {
       const response = await fetch(
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=" +
@@ -56,7 +84,9 @@ export const aiUtils = {
               {
                 parts: [
                   {
-                    text: buildPrompt.forGlobalChat(userQuery),
+                    text: buildPrompt.forGlobalChat(userQuery, {
+                      userPreferences: context.userPreferences
+                    }),
                   },
                 ],
               },
