@@ -1,3 +1,34 @@
+// Types for dynamic prompting
+interface PromptContext {
+  currentDate: string;
+  timeOfDay: string;
+  userPreferences?: {
+    topics?: string[];
+    readingLevel?: 'basic' | 'intermediate' | 'advanced';
+    preferredLanguage?: string;
+  };
+  articleMetadata?: {
+    category?: string;
+    source?: string;
+    publishDate?: string;
+    complexity?: number;
+  };
+}
+
+// Dynamic prompt templates
+const PROMPT_TEMPLATES = {
+  TIME_CONTEXT: `Current date: {currentDate}
+Time context: {timeOfDay}`,
+
+  TOPIC_FOCUS: `Focus areas: {topics}
+Reading level: {readingLevel}`,
+
+  ARTICLE_METADATA: `Category: {category}
+Source: {source}
+Published: {publishDate}
+Content complexity: {complexity}/10`,
+}
+
 // System prompts for the AI
 export const SYSTEM_PROMPTS = {
   // Main system prompt that defines the AI's persona and behavior
@@ -46,19 +77,79 @@ Multiple Choice Questions:
 - For UI navigation, provide detailed step-by-step instructions with specific locations and visual identifiers`
 }
 
+// Helper function to generate dynamic context
+const generateDynamicContext = (context: PromptContext): string => {
+  const timeContext = PROMPT_TEMPLATES.TIME_CONTEXT
+    .replace('{currentDate}', context.currentDate)
+    .replace('{timeOfDay}', context.timeOfDay)
+
+  const topicContext = context.userPreferences 
+    ? PROMPT_TEMPLATES.TOPIC_FOCUS
+        .replace('{topics}', context.userPreferences.topics?.join(', ') || 'General')
+        .replace('{readingLevel}', context.userPreferences.readingLevel || 'intermediate')
+    : ''
+
+  const articleContext = context.articleMetadata 
+    ? PROMPT_TEMPLATES.ARTICLE_METADATA
+        .replace('{category}', context.articleMetadata.category || 'General')
+        .replace('{source}', context.articleMetadata.source || 'Unknown')
+        .replace('{publishDate}', context.articleMetadata.publishDate || 'N/A')
+        .replace('{complexity}', context.articleMetadata.complexity?.toString() || '5')
+    : ''
+
+  return `${timeContext}
+${topicContext}
+${articleContext}`.trim()
+}
+
+// Helper function to get current context
+const getCurrentContext = (): PromptContext => {
+  const now = new Date()
+  const hours = now.getHours()
+  
+  return {
+    currentDate: now.toLocaleDateString(),
+    timeOfDay: hours < 12 ? 'morning' : hours < 18 ? 'afternoon' : 'evening'
+  }
+}
+
 // Helper function to combine system prompt with user query
 export const buildPrompt = {
   // Build prompt for article context
-  forArticleContext: (articleContent: string, userQuery: string): string => {
+  forArticleContext: (
+    articleContent: string, 
+    userQuery: string, 
+    context: Partial<PromptContext> = {}
+  ): string => {
+    const dynamicContext = generateDynamicContext({
+      ...getCurrentContext(),
+      ...context,
+      articleMetadata: {
+        ...context.articleMetadata,
+        complexity: context.articleMetadata?.complexity || 
+          Math.min(Math.ceil(articleContent.length / 1000), 10) // Estimate complexity based on length
+      }
+    })
+
     return `${SYSTEM_PROMPTS.MAIN_PROMPT}
+${dynamicContext}
 ${SYSTEM_PROMPTS.ARTICLE_CONTEXT_PROMPT}
 Article Content: "${articleContent.substring(0, 2000)}..."
 User Query: ${userQuery}`
   },
 
   // Build prompt for global chat
-  forGlobalChat: (userQuery: string): string => {
+  forGlobalChat: (
+    userQuery: string, 
+    context: Partial<PromptContext> = {}
+  ): string => {
+    const dynamicContext = generateDynamicContext({
+      ...getCurrentContext(),
+      ...context
+    })
+
     return `${SYSTEM_PROMPTS.MAIN_PROMPT}
+${dynamicContext}
 ${SYSTEM_PROMPTS.GLOBAL_CHAT_PROMPT}
 User Query: ${userQuery}`
   }
