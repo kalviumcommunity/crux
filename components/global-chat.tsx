@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Send, Bot, User, Loader2, AlertCircle, Sparkles, CheckCircle, AlertTriangle, Info } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
+import { apiLogout } from "@/lib/auth"
 
 interface StructuredResponse {
   answer: string;
@@ -94,6 +95,10 @@ export function GlobalChat() {
     setError(null)
 
     try {
+      if (!token) {
+        throw new Error("No authentication token available")
+      }
+
       const response = await fetch("/api/chat/global", {
         method: "POST",
         headers: {
@@ -107,6 +112,13 @@ export function GlobalChat() {
 
       if (!response.ok) {
         const errorData = await response.json()
+        if (response.status === 401) {
+          // Token is invalid or expired
+          console.log("Token expired or invalid, triggering logout...")
+          await apiLogout() // Clear local storage
+          window.location.href = "/auth/login" // Redirect to login
+          throw new Error("Session expired. Please log in again.")
+        }
         throw new Error(errorData.error || "Failed to get AI response")
       }
 
