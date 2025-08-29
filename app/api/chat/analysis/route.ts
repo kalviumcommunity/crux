@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getStopSequences, AICallOptions } from '@/lib/stopSequences'
 
 type AnalysisPrompt = {
   article: {
@@ -9,10 +10,19 @@ type AnalysisPrompt = {
       name: string
     }
   }
+  analysisType?: 'ANALYSIS' | 'CHAIN_OF_THOUGHT' | 'FACT_CHECK' | 'SUMMARY'
+  options?: AICallOptions
 }
 
-const generateChainOfThoughtPrompt = (article: AnalysisPrompt['article']) => {
-  return `Let's analyze this news article step by step:
+const generatePromptWithStops = (
+  article: AnalysisPrompt['article'],
+  analysisType: AnalysisPrompt['analysisType'] = 'CHAIN_OF_THOUGHT'
+) => {
+  const stopSequences = getStopSequences(analysisType)
+  const endMarker = stopSequences[0] // Use first stop sequence as end marker
+
+  return {
+    prompt: `Let's analyze this news article step by step:
 
 1. Initial Understanding:
    - Article Title: "${article.title}"
@@ -66,12 +76,22 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const prompt = generateChainOfThoughtPrompt(body.article)
+    const { prompt, stopSequences, options } = generatePromptWithStops(
+      body.article,
+      body.analysisType
+    )
 
-    // Here you would typically send this to an AI model
-    // For now, we'll return the structured prompt
+    // Merge default options with user-provided options
+    const finalOptions: AICallOptions = {
+      ...options,
+      ...body.options,
+      stopSequences
+    }
+
+    // Here you would typically send this to an AI model with the stop sequences
     return NextResponse.json({
       prompt,
+      configuration: finalOptions,
       message: 'Use this prompt with your preferred AI model'
     })
   } catch (error) {
