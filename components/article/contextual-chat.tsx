@@ -5,15 +5,26 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Send, Bot, User, Loader2, MessageSquare, AlertCircle } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Separator } from "@/components/ui/separator"
+import { Send, Bot, User, Loader2, MessageSquare, AlertCircle, CheckCircle, AlertTriangle, Info } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+
+interface StructuredResponse {
+  answer: string;
+  keyPoints: string[];
+  confidence: 'high' | 'medium' | 'low';
+  sourceReferences?: string[];
+  relatedTopics?: string[];
+}
 
 interface Message {
   id: string
   content: string
   sender: "user" | "ai"
   timestamp: Date
+  structuredResponse?: StructuredResponse
 }
 
 interface Article {
@@ -48,6 +59,28 @@ export function ContextualChat({ article }: ContextualChatProps) {
   const [inputValue, setInputValue] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const getConfidenceIcon = (confidence: 'high' | 'medium' | 'low') => {
+    switch (confidence) {
+      case 'high':
+        return <CheckCircle className="w-4 h-4 text-green-500" />
+      case 'medium':
+        return <AlertTriangle className="w-4 h-4 text-yellow-500" />
+      case 'low':
+        return <Info className="w-4 h-4 text-red-500" />
+    }
+  }
+
+  const getConfidenceColor = (confidence: 'high' | 'medium' | 'low') => {
+    switch (confidence) {
+      case 'high':
+        return 'bg-green-100 text-green-800 border-green-200'
+      case 'medium':
+        return 'bg-yellow-100 text-yellow-800 border-yellow-200'
+      case 'low':
+        return 'bg-red-100 text-red-800 border-red-200'
+    }
+  }
 
   const handleSendMessage = async () => {
     if (!inputValue.trim() || isLoading) return
@@ -95,6 +128,7 @@ export function ContextualChat({ article }: ContextualChatProps) {
         content: data.response,
         sender: "ai",
         timestamp: new Date(),
+        structuredResponse: data.structuredResponse,
       }
       setMessages((prev) => [...prev, aiMessage])
     } catch (err) {
@@ -112,6 +146,66 @@ export function ContextualChat({ article }: ContextualChatProps) {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const renderStructuredResponse = (structuredResponse: StructuredResponse) => {
+    return (
+      <div className="mt-3 space-y-3">
+        {/* Confidence Badge */}
+        <div className="flex items-center gap-2">
+          {getConfidenceIcon(structuredResponse.confidence)}
+          <Badge 
+            variant="outline" 
+            className={`text-xs ${getConfidenceColor(structuredResponse.confidence)}`}
+          >
+            Confidence: {structuredResponse.confidence}
+          </Badge>
+        </div>
+
+        {/* Key Points */}
+        {structuredResponse.keyPoints && structuredResponse.keyPoints.length > 0 && (
+          <div>
+            <h4 className="text-sm font-semibold mb-2 text-foreground">Key Points:</h4>
+            <ul className="space-y-1">
+              {structuredResponse.keyPoints.map((point, index) => (
+                <li key={index} className="text-sm text-muted-foreground flex items-start gap-2">
+                  <span className="w-1.5 h-1.5 bg-accent rounded-full mt-2 flex-shrink-0"></span>
+                  {point}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Source References */}
+        {structuredResponse.sourceReferences && structuredResponse.sourceReferences.length > 0 && (
+          <div>
+            <h4 className="text-sm font-semibold mb-2 text-foreground">Source References:</h4>
+            <div className="space-y-1">
+              {structuredResponse.sourceReferences.map((reference, index) => (
+                <div key={index} className="text-sm text-muted-foreground bg-muted/50 p-2 rounded">
+                  "{reference}"
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Related Topics */}
+        {structuredResponse.relatedTopics && structuredResponse.relatedTopics.length > 0 && (
+          <div>
+            <h4 className="text-sm font-semibold mb-2 text-foreground">Related Topics:</h4>
+            <div className="flex flex-wrap gap-1">
+              {structuredResponse.relatedTopics.map((topic, index) => (
+                <Badge key={index} variant="secondary" className="text-xs">
+                  {topic}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    )
   }
 
   if (!user) {
@@ -170,7 +264,8 @@ export function ContextualChat({ article }: ContextualChatProps) {
                     message.sender === "user" ? "bg-accent text-accent-foreground" : "bg-muted text-muted-foreground"
                   }`}
                 >
-                  {message.content}
+                  <div className="whitespace-pre-wrap">{message.content}</div>
+                  {message.structuredResponse && renderStructuredResponse(message.structuredResponse)}
                 </div>
                 {message.sender === "user" && (
                   <div className="w-8 h-8 bg-muted rounded-full flex items-center justify-center flex-shrink-0">
