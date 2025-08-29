@@ -195,19 +195,14 @@ User Query: ${userQuery}`
       ...context
     })
 
-    return `${SYSTEM_PROMPTS.MAIN_PROMPT}
-${dynamicContext}
-${SYSTEM_PROMPTS.GLOBAL_CHAT_PROMPT}
+    return `You are CruX, a news-focused AI assistant. Please provide a helpful response to this query: ${userQuery}
 
-IMPORTANT: You must respond using the structured format with the following fields:
-- answer: Direct response to the user's query
-- newsSummary: Brief context or background information (if relevant)
-- keyFacts: 3-5 key facts related to the query
-- sources: Any mentioned sources or references
-- recommendations: 2-3 suggested follow-up questions
-- confidence: 'high', 'medium', or 'low' based on available information
+Please structure your response with:
+1. A clear, direct answer
+2. 2-3 relevant key facts or points
+3. Any important context
 
-User Query: ${userQuery}`
+Keep your response factual, specific, and professional.`
   },
 
   // Build prompt for news analysis

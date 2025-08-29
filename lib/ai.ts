@@ -1,6 +1,10 @@
 import { buildPrompt } from "./prompts"
 import { logTokenUsage } from "./tokenCounter"
 
+// Gemini API configuration
+const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1'
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash'
+
 // Structured output schemas for different response types
 const STRUCTURED_SCHEMAS = {
   // Schema for contextual article responses
@@ -268,9 +272,12 @@ export const aiUtils = {
         userPreferences: context.userPreferences
       });
 
+      if (!process.env.GEMINI_API_KEY) {
+        throw new Error("GEMINI_API_KEY is not configured")
+      }
+
       const response = await fetch(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=" +
-          process.env.GEMINI_API_KEY,
+        `${GEMINI_API_BASE}/models/${GEMINI_MODEL}:generateContent?key=${process.env.GEMINI_API_KEY}`,
         {
           method: "POST",
           headers: {
@@ -287,37 +294,25 @@ export const aiUtils = {
               },
             ],
             generationConfig: {
-              temperature: 0.4,
-              topK: 40,
-              topP: 0.95,
+              temperature: 0.7,
               maxOutputTokens: 2048,
-            },
-            tools: [
-              {
-                functionDeclarations: [
-                  {
-                    name: "getGlobalResponse",
-                    description: "Generate a structured response for general news queries",
-                    parameters: STRUCTURED_SCHEMAS.GLOBAL_RESPONSE
-                  }
-                ]
-              }
-            ],
-            toolConfig: {
-              functionCallingConfig: {
-                mode: "ANY",
-                allowedFunctionNames: ["getGlobalResponse"]
-              }
             }
           }),
         },
       )
 
       if (!response.ok) {
-        throw new Error(`Gemini API error: ${response.status}`)
+        const errorText = await response.text()
+        console.error("Gemini API error details:", {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorText
+        })
+        throw new Error(`Gemini API error: ${response.status} - ${errorText}`)
       }
 
       const data = await response.json()
+      console.log("Gemini API response:", JSON.stringify(data, null, 2))
       
       // Extract structured response from function call
       const functionCall = data.candidates?.[0]?.content?.parts?.[0]?.functionCall
@@ -334,9 +329,24 @@ export const aiUtils = {
         return structuredResponse
       }
 
-      // Fallback to unstructured response
-      const fallbackText = data.candidates?.[0]?.content?.parts?.[0]?.text ||
-        "I apologize, but I could not generate a response at this time."
+      // If we have a text response but no function call, format it into our structure
+      if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
+        const text = data.candidates[0].content.parts[0].text;
+        
+        // Split the response into sections based on numbered points
+        const sections = text.split(/\d+\./).filter((s: string) => s.trim().length > 0);
+        
+        return {
+          answer: sections[0]?.trim() || text,
+          keyFacts: sections.slice(1).map((s: string) => s.trim()),
+          confidence: "high",
+          sources: [],
+          recommendations: []
+        }
+      }
+
+      // Fallback to error message if no valid response
+      const fallbackText = "I apologize, but I could not generate a response at this time."
       
       return {
         answer: fallbackText,

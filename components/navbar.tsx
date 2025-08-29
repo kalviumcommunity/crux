@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { MessageSquare, Newspaper, User, LogOut } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
@@ -22,11 +23,18 @@ export function Navbar() {
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link href="/" className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-accent rounded-lg flex items-center justify-center">
-              <span className="text-accent-foreground font-bold text-lg">C</span>
+          <Link href="/" className="flex items-center space-x-3">
+            <div className="relative h-8 w-8">
+              <Image
+                src="/CruX%20Logo.png"
+                alt="CruX"
+                fill
+                sizes="32px"
+                className="object-contain"
+                priority
+              />
             </div>
-            <span className="text-primary-foreground font-bold text-xl">CruX</span>
+            <span className="text-primary-foreground font-bold text-xl tracking-tight">CruX</span>
           </Link>
 
           {/* Navigation Links */}

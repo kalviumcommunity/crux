@@ -42,7 +42,8 @@ async function getArticleById(id: string): Promise<Article | null> {
 }
 
 export default async function ArticlePage({ params }: ArticlePageProps) {
-  const article = await getArticleById(params.id)
+  const { id } = params
+  const article = await getArticleById(id)
 
   if (!article) {
     notFound()
