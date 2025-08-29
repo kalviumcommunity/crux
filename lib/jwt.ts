@@ -15,14 +15,26 @@ export const jwtUtils = {
 
   verify: (token: string): JWTPayload | null => {
     try {
-      const secret = process.env.JWT_SECRET || "fallback_secret_key"
-      const decoded = jwt.verify(token, secret) as JWTPayload
+      if (!process.env.JWT_SECRET) {
+        console.error("JWT_SECRET is not set in environment variables")
+        return null
+      }
+      
+      const decoded = jwt.verify(token, process.env.JWT_SECRET) as JWTPayload
+      
+      // Validate the payload structure
+      if (!decoded.userId || !decoded.email || !decoded.username) {
+        console.error("Invalid token payload structure")
+        return null
+      }
+      
       return {
         userId: decoded.userId,
         email: decoded.email,
         username: decoded.username,
       }
-    } catch {
+    } catch (error) {
+      console.error("Token verification failed:", error)
       return null
     }
   },

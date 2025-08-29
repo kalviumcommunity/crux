@@ -22,15 +22,57 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null)
 
   useEffect(() => {
-    // Check for existing user on mount
+    // Check for existing user and validate token on mount
     const user = getCurrentUser()
     const userToken = getCurrentToken()
-    setAuthState({
-      user,
-      isLoading: false,
-      isAuthenticated: !!user,
-    })
-    setToken(userToken)
+    
+    if (userToken) {
+      // Validate token by making a test request
+      fetch("/api/chat/global", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${userToken}`,
+        },
+        body: JSON.stringify({ userQuery: "test" }),
+      }).then(response => {
+        if (!response.ok && response.status === 401) {
+          // Token is invalid or expired, clear the auth state
+          console.log("Token expired or invalid, logging out...")
+          apiLogout()
+          setAuthState({
+            user: null,
+            isLoading: false,
+            isAuthenticated: false,
+          })
+          setToken(null)
+        } else {
+          // Token is valid
+          setAuthState({
+            user,
+            isLoading: false,
+            isAuthenticated: !!user,
+          })
+          setToken(userToken)
+        }
+      }).catch(() => {
+        // Error validating token, maintain the session but log the error
+        console.error("Error validating token")
+        setAuthState({
+          user,
+          isLoading: false,
+          isAuthenticated: !!user,
+        })
+        setToken(userToken)
+      })
+    } else {
+      setAuthState({
+        user: null,
+        isLoading: false,
+        isAuthenticated: false,
+      })
+      setToken(null)
+    }
   }, [])
 
   const login = async (email: string, password: string) => {

@@ -1,4 +1,5 @@
 import { buildPrompt } from "./prompts"
+import { logTokenUsage } from "./tokenCounter"
 
 // Structured output schemas for different response types
 const STRUCTURED_SCHEMAS = {
@@ -148,6 +149,15 @@ export const aiUtils = {
     } = {}
   ): Promise<ContextualResponse> => {
     try {
+      const prompt = buildPrompt.forArticleContext(articleContent, userQuery, {
+        articleMetadata: {
+          category: context.category,
+          source: context.source,
+          publishDate: context.publishDate
+        },
+        userPreferences: context.userPreferences
+      });
+
       const response = await fetch(
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=" +
           process.env.GEMINI_API_KEY,
@@ -161,14 +171,7 @@ export const aiUtils = {
               {
                 parts: [
                   {
-                    text: buildPrompt.forArticleContext(articleContent, userQuery, {
-                      articleMetadata: {
-                        category: context.category,
-                        source: context.source,
-                        publishDate: context.publishDate
-                      },
-                      userPreferences: context.userPreferences
-                    }),
+                    text: prompt,
                   },
                 ],
               },
@@ -210,7 +213,16 @@ export const aiUtils = {
       const functionCall = data.candidates?.[0]?.content?.parts?.[0]?.functionCall
       if (functionCall && functionCall.name === "getContextualResponse") {
         const args = JSON.parse(functionCall.args)
-        return args as ContextualResponse
+        const structuredResponse = args as ContextualResponse
+        
+        // Log token usage
+        logTokenUsage(
+          prompt,
+          JSON.stringify(structuredResponse),
+          articleContent.substring(0, 2000)
+        )
+        
+        return structuredResponse
       }
 
       // Fallback to unstructured response
@@ -252,6 +264,10 @@ export const aiUtils = {
     } = {}
   ): Promise<GlobalResponse> => {
     try {
+      const prompt = buildPrompt.forGlobalChat(userQuery, {
+        userPreferences: context.userPreferences
+      });
+
       const response = await fetch(
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=" +
           process.env.GEMINI_API_KEY,
@@ -265,9 +281,7 @@ export const aiUtils = {
               {
                 parts: [
                   {
-                    text: buildPrompt.forGlobalChat(userQuery, {
-                      userPreferences: context.userPreferences
-                    }),
+                    text: prompt,
                   },
                 ],
               },
@@ -309,7 +323,15 @@ export const aiUtils = {
       const functionCall = data.candidates?.[0]?.content?.parts?.[0]?.functionCall
       if (functionCall && functionCall.name === "getGlobalResponse") {
         const args = JSON.parse(functionCall.args)
-        return args as GlobalResponse
+        const structuredResponse = args as GlobalResponse
+
+        // Log token usage
+        logTokenUsage(
+          prompt,
+          JSON.stringify(structuredResponse)
+        )
+        
+        return structuredResponse
       }
 
       // Fallback to unstructured response
