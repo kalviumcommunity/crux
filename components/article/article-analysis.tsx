@@ -16,6 +16,7 @@ interface ArticleAnalysisProps {
 export function ArticleAnalysis({ article }: ArticleAnalysisProps) {
   const [analysis, setAnalysis] = useState<string>('')
   const [loading, setLoading] = useState(false)
+  const [analysisType, setAnalysisType] = useState<'CHAIN_OF_THOUGHT' | 'FACT_CHECK' | 'SUMMARY'>('CHAIN_OF_THOUGHT')
 
   const generateAnalysis = async () => {
     try {
@@ -25,7 +26,14 @@ export function ArticleAnalysis({ article }: ArticleAnalysisProps) {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ article }),
+        body: JSON.stringify({ 
+          article,
+          analysisType,
+          options: {
+            temperature: 0.7,
+            maxTokens: 1000
+          }
+        }),
       })
 
       const data = await response.json()
