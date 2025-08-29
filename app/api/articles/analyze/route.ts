@@ -16,21 +16,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid token" }, { status: 401 })
     }
 
-    const { userQuery } = await request.json()
+    const { content, analysisType = 'comprehensive' } = await request.json()
 
-    if (!userQuery) {
-      return NextResponse.json({ error: "User query is required" }, { status: 400 })
+    if (!content) {
+      return NextResponse.json({ error: "Article content is required" }, { status: 400 })
     }
 
-    // Generate AI response
-    const structuredResponse = await aiUtils.generateGlobalResponse(userQuery)
+    // Generate structured news analysis
+    const analysis = await aiUtils.generateNewsAnalysis(content, analysisType)
 
-    return NextResponse.json({ 
-      response: structuredResponse.answer,
-      structuredResponse 
-    })
+    return NextResponse.json({ analysis })
   } catch (error) {
-    console.error("Global chat error:", error)
-    return NextResponse.json({ error: "Failed to generate response" }, { status: 500 })
+    console.error("News analysis error:", error)
+    return NextResponse.json({ error: "Failed to generate analysis" }, { status: 500 })
   }
 }

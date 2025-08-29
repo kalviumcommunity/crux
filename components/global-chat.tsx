@@ -4,15 +4,26 @@ import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Send, Bot, User, Loader2, AlertCircle, Sparkles } from "lucide-react"
+import { Send, Bot, User, Loader2, AlertCircle, Sparkles, CheckCircle, AlertTriangle, Info } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
+
+interface StructuredResponse {
+  answer: string;
+  newsSummary?: string;
+  keyFacts: string[];
+  sources?: string[];
+  recommendations?: string[];
+  confidence: 'high' | 'medium' | 'low';
+}
 
 interface Message {
   id: string
   content: string
   sender: "user" | "ai"
   timestamp: Date
+  structuredResponse?: StructuredResponse
 }
 
 export function GlobalChat() {
@@ -38,6 +49,28 @@ export function GlobalChat() {
   useEffect(() => {
     scrollToBottom()
   }, [messages])
+
+  const getConfidenceIcon = (confidence: 'high' | 'medium' | 'low') => {
+    switch (confidence) {
+      case 'high':
+        return <CheckCircle className="w-4 h-4 text-green-500" />
+      case 'medium':
+        return <AlertTriangle className="w-4 h-4 text-yellow-500" />
+      case 'low':
+        return <Info className="w-4 h-4 text-red-500" />
+    }
+  }
+
+  const getConfidenceColor = (confidence: 'high' | 'medium' | 'low') => {
+    switch (confidence) {
+      case 'high':
+        return 'bg-green-100 text-green-800 border-green-200'
+      case 'medium':
+        return 'bg-yellow-100 text-yellow-800 border-yellow-200'
+      case 'low':
+        return 'bg-red-100 text-red-800 border-red-200'
+    }
+  }
 
   const handleSendMessage = async () => {
     if (!inputValue.trim() || isLoading) return
@@ -84,6 +117,7 @@ export function GlobalChat() {
         content: data.response,
         sender: "ai",
         timestamp: new Date(),
+        structuredResponse: data.structuredResponse,
       }
       setMessages((prev) => [...prev, aiMessage])
     } catch (err) {
@@ -101,6 +135,77 @@ export function GlobalChat() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const renderStructuredResponse = (structuredResponse: StructuredResponse) => {
+    return (
+      <div className="mt-4 space-y-4">
+        {/* Confidence Badge */}
+        <div className="flex items-center gap-2">
+          {getConfidenceIcon(structuredResponse.confidence)}
+          <Badge 
+            variant="outline" 
+            className={`text-xs ${getConfidenceColor(structuredResponse.confidence)}`}
+          >
+            Confidence: {structuredResponse.confidence}
+          </Badge>
+        </div>
+
+        {/* News Summary */}
+        {structuredResponse.newsSummary && (
+          <div>
+            <h4 className="text-sm font-semibold mb-2 text-foreground">News Context:</h4>
+            <p className="text-sm text-muted-foreground bg-muted/50 p-3 rounded">
+              {structuredResponse.newsSummary}
+            </p>
+          </div>
+        )}
+
+        {/* Key Facts */}
+        {structuredResponse.keyFacts && structuredResponse.keyFacts.length > 0 && (
+          <div>
+            <h4 className="text-sm font-semibold mb-2 text-foreground">Key Facts:</h4>
+            <ul className="space-y-1">
+              {structuredResponse.keyFacts.map((fact, index) => (
+                <li key={index} className="text-sm text-muted-foreground flex items-start gap-2">
+                  <span className="w-1.5 h-1.5 bg-accent rounded-full mt-2 flex-shrink-0"></span>
+                  {fact}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Sources */}
+        {structuredResponse.sources && structuredResponse.sources.length > 0 && (
+          <div>
+            <h4 className="text-sm font-semibold mb-2 text-foreground">Sources:</h4>
+            <div className="flex flex-wrap gap-1">
+              {structuredResponse.sources.map((source, index) => (
+                <Badge key={index} variant="outline" className="text-xs">
+                  {source}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Recommendations */}
+        {structuredResponse.recommendations && structuredResponse.recommendations.length > 0 && (
+          <div>
+            <h4 className="text-sm font-semibold mb-2 text-foreground">Follow-up Questions:</h4>
+            <ul className="space-y-1">
+              {structuredResponse.recommendations.map((recommendation, index) => (
+                <li key={index} className="text-sm text-muted-foreground flex items-start gap-2">
+                  <span className="w-1.5 h-1.5 bg-primary rounded-full mt-2 flex-shrink-0"></span>
+                  {recommendation}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    )
   }
 
   if (!user) {
@@ -164,7 +269,8 @@ export function GlobalChat() {
               className={`max-w-[75%] ${message.sender === "user" ? "bg-accent text-accent-foreground" : "bg-muted/50"}`}
             >
               <CardContent className="p-4">
-                <p className="text-sm leading-relaxed">{message.content}</p>
+                <div className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</div>
+                {message.structuredResponse && renderStructuredResponse(message.structuredResponse)}
                 <p className="text-xs text-muted-foreground mt-2 opacity-70">
                   {message.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                 </p>
