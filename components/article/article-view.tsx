@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { ArrowLeft, Clock, ExternalLink, MessageSquare, Share2 } from "lucide-react"
 import { ContextualChat } from "./contextual-chat"
+import { ArticleAnalysis } from "./article-analysis"
 
 interface Article {
   id: string
@@ -161,8 +162,9 @@ export function ArticleView({ article }: ArticleViewProps) {
 
           {/* Contextual Chat Panel */}
           {showChat && (
-            <div className="lg:col-span-1">
+            <div className="lg:col-span-1 space-y-4">
               <ContextualChat article={article} />
+              <ArticleAnalysis article={article} />
             </div>
           )}
         </div>
