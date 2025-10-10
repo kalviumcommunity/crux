@@ -42,10 +42,10 @@ const fallbackArticles: Article[] = [
 
 export async function GET(
   request: NextRequest,
-  context: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = context.params
+    const { id } = await params
 
     // Try GNews API first
     const GNEWS_API_KEY = process.env.GNEWS_API_KEY

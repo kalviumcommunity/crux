@@ -1,115 +1,10 @@
 import { buildPrompt } from "./prompts"
+import { webSearch, type WebSearchResult } from "./search"
 import { logTokenUsage } from "./tokenCounter"
 
 // Gemini API configuration
-const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1'
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash'
-
-// Structured output schemas for different response types
-const STRUCTURED_SCHEMAS = {
-  // Schema for contextual article responses
-  CONTEXTUAL_RESPONSE: {
-    type: "object",
-    properties: {
-      answer: {
-        type: "string",
-        description: "Direct answer to the user's question about the article"
-      },
-      keyPoints: {
-        type: "array",
-        items: { type: "string" },
-        description: "Key points from the article relevant to the query"
-      },
-      confidence: {
-        type: "string",
-        enum: ["high", "medium", "low"],
-        description: "Confidence level in the response based on article content"
-      },
-      sourceReferences: {
-        type: "array",
-        items: { type: "string" },
-        description: "Specific quotes or references from the article"
-      },
-      relatedTopics: {
-        type: "array",
-        items: { type: "string" },
-        description: "Related topics or themes mentioned in the article"
-      }
-    },
-    required: ["answer", "keyPoints", "confidence"]
-  },
-
-  // Schema for global chat responses
-  GLOBAL_RESPONSE: {
-    type: "object",
-    properties: {
-      answer: {
-        type: "string",
-        description: "Direct answer to the user's general news query"
-      },
-      newsSummary: {
-        type: "string",
-        description: "Brief summary of relevant news context"
-      },
-      keyFacts: {
-        type: "array",
-        items: { type: "string" },
-        description: "Key facts related to the query"
-      },
-      sources: {
-        type: "array",
-        items: { type: "string" },
-        description: "Mentioned sources or references"
-      },
-      recommendations: {
-        type: "array",
-        items: { type: "string" },
-        description: "Suggested follow-up topics or questions"
-      },
-      confidence: {
-        type: "string",
-        enum: ["high", "medium", "low"],
-        description: "Confidence level in the response"
-      }
-    },
-    required: ["answer", "keyFacts", "confidence"]
-  },
-
-  // Schema for news analysis responses
-  NEWS_ANALYSIS: {
-    type: "object",
-    properties: {
-      headline: {
-        type: "string",
-        description: "Main headline or topic"
-      },
-      summary: {
-        type: "string",
-        description: "Comprehensive summary of the news"
-      },
-      impact: {
-        type: "string",
-        description: "Potential impact or significance"
-      },
-      stakeholders: {
-        type: "array",
-        items: { type: "string" },
-        description: "Key stakeholders or affected parties"
-      },
-      timeline: {
-        type: "array",
-        items: { type: "string" },
-        description: "Key events or timeline"
-      },
-      sentiment: {
-        type: "string",
-        enum: ["positive", "negative", "neutral", "mixed"],
-        description: "Overall sentiment of the news"
-      }
-    },
-    required: ["headline", "summary", "impact", "sentiment"]
-  }
-}
+const GEMINI_API_BASE = process.env.GEMINI_API_BASE || 'https://generativelanguage.googleapis.com/v1'
+const GEMINI_MODEL = 'gemini-2.5-flash'
 
 // Type definitions for structured responses
 export interface ContextualResponse {
@@ -138,6 +33,78 @@ export interface NewsAnalysis {
   sentiment: 'positive' | 'negative' | 'neutral' | 'mixed';
 }
 
+// Helper function to handle Gemini API calls
+const callGeminiAPI = async (prompt: string, generationConfig: any = {}) => {
+  if (!process.env.GEMINI_API_KEY) {
+    throw new Error("GEMINI_API_KEY is not configured")
+  }
+
+  const response = await fetch(
+    `${GEMINI_API_BASE}/models/${GEMINI_MODEL}:generateContent?key=${process.env.GEMINI_API_KEY}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: prompt }],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.3,
+          topK: 40,
+          topP: 0.95,
+          maxOutputTokens: 2048,
+          ...generationConfig
+        }
+      }),
+    },
+  )
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    console.error(`Gemini API error (${response.status}):`, errorText)
+    throw new Error(`Gemini API error: ${response.status} - ${errorText}`)
+  }
+
+  return await response.json()
+}
+
+// Helper function to extract clean text from response
+const extractResponseText = (data: any): string => {
+  const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text
+  
+  if (!textResponse) {
+    return "I apologize, but I could not generate a response at this time."
+  }
+
+  // Clean up the response - remove any JSON formatting or code blocks
+  let cleanText = textResponse
+  
+  // Remove ```json and ``` markers
+  cleanText = cleanText.replace(/```json\s*/g, '').replace(/```\s*/g, '')
+  
+  // Try to extract just the text content if it's in JSON format
+  try {
+    const parsed = JSON.parse(cleanText)
+    // If it has an answer field, use that
+    if (parsed.answer) {
+      return parsed.answer
+    }
+    // If it's an object but no answer field, return as string
+    if (typeof parsed === 'object') {
+      return JSON.stringify(parsed)
+    }
+  } catch (error) {
+    // Not JSON, return the text as is
+  }
+
+  return cleanText.trim()
+}
+
 export const aiUtils = {
   generateContextualResponse: async (
     articleContent: string, 
@@ -151,7 +118,7 @@ export const aiUtils = {
         readingLevel?: 'basic' | 'intermediate' | 'advanced';
       }
     } = {}
-  ): Promise<ContextualResponse> => {
+  ): Promise<string> => {
     try {
       const prompt = buildPrompt.forArticleContext(articleContent, userQuery, {
         articleMetadata: {
@@ -160,100 +127,30 @@ export const aiUtils = {
           publishDate: context.publishDate
         },
         userPreferences: context.userPreferences
-      });
+      })
 
-      const response = await fetch(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=" +
-          process.env.GEMINI_API_KEY,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  {
-                    text: prompt,
-                  },
-                ],
-              },
-            ],
-            generationConfig: {
-              temperature: 0.3,
-              topK: 40,
-              topP: 0.95,
-              maxOutputTokens: 2048,
-            },
-            tools: [
-              {
-                functionDeclarations: [
-                  {
-                    name: "getContextualResponse",
-                    description: "Generate a structured response for article-specific queries",
-                    parameters: STRUCTURED_SCHEMAS.CONTEXTUAL_RESPONSE
-                  }
-                ]
-              }
-            ],
-            toolConfig: {
-              functionCallingConfig: {
-                mode: "ANY",
-                allowedFunctionNames: ["getContextualResponse"]
-              }
-            }
-          }),
-        },
+      const data = await callGeminiAPI(prompt, {
+        temperature: 0.3,
+        topK: 40,
+        topP: 0.95,
+        maxOutputTokens: 2048,
+      })
+
+      console.log("Gemini API response received")
+      
+      const responseText = extractResponseText(data)
+      
+      // Log token usage
+      logTokenUsage(
+        prompt,
+        responseText,
+        articleContent.substring(0, 2000)
       )
 
-      if (!response.ok) {
-        throw new Error(`Gemini API error: ${response.status}`)
-      }
-
-      const data = await response.json()
-      
-      // Extract structured response from function call
-      const functionCall = data.candidates?.[0]?.content?.parts?.[0]?.functionCall
-      if (functionCall && functionCall.name === "getContextualResponse") {
-        const args = JSON.parse(functionCall.args)
-        const structuredResponse = args as ContextualResponse
-        
-        // Log token usage
-        logTokenUsage(
-          prompt,
-          JSON.stringify(structuredResponse),
-          articleContent.substring(0, 2000)
-        )
-        
-        return structuredResponse
-      }
-
-      // Fallback to unstructured response
-      const fallbackText = data.candidates?.[0]?.content?.parts?.[0]?.text ||
-        "I apologize, but I could not generate a response at this time."
-      
-      return {
-        answer: fallbackText,
-        keyPoints: ["Unable to extract key points from response"],
-        confidence: "low",
-        sourceReferences: [],
-        relatedTopics: []
-      }
+      return responseText
     } catch (error) {
       console.error("Error calling Gemini API:", error)
-      // Fallback to structured mock response
-      return {
-        answer: `Based on the article content, ${userQuery.toLowerCase()} relates to the key findings discussed. The article highlights important developments that could impact this area significantly.`,
-        keyPoints: [
-          "Article contains relevant information",
-          "Key developments are highlighted",
-          "Potential impacts are discussed"
-        ],
-        confidence: "medium",
-        sourceReferences: [],
-        relatedTopics: []
-      }
+      return `Based on the article content, ${userQuery.toLowerCase()} relates to the key findings discussed. The article highlights important developments that could impact this area significantly.`
     }
   },
 
@@ -264,110 +161,90 @@ export const aiUtils = {
         topics?: string[];
         readingLevel?: 'basic' | 'intermediate' | 'advanced';
         preferredLanguage?: string;
-      }
+      },
+      enableWebSearch?: boolean;
+      maxWebResults?: number;
     } = {}
-  ): Promise<GlobalResponse> => {
+  ): Promise<GlobalResponse & { webResults: WebSearchResult[] }> => {
     try {
-      const prompt = buildPrompt.forGlobalChat(userQuery, {
-        userPreferences: context.userPreferences
-      });
-
-      if (!process.env.GEMINI_API_KEY) {
-        throw new Error("GEMINI_API_KEY is not configured")
-      }
-
-      const response = await fetch(
-        `${GEMINI_API_BASE}/models/${GEMINI_MODEL}:generateContent?key=${process.env.GEMINI_API_KEY}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  {
-                    text: prompt,
-                  },
-                ],
-              },
-            ],
-            generationConfig: {
-              temperature: 0.7,
-              maxOutputTokens: 2048,
-            }
-          }),
-        },
-      )
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error("Gemini API error details:", {
-          status: response.status,
-          statusText: response.statusText,
-          error: errorText
-        })
-        throw new Error(`Gemini API error: ${response.status} - ${errorText}`)
-      }
-
-      const data = await response.json()
-      console.log("Gemini API response:", JSON.stringify(data, null, 2))
-      
-      // Extract structured response from function call
-      const functionCall = data.candidates?.[0]?.content?.parts?.[0]?.functionCall
-      if (functionCall && functionCall.name === "getGlobalResponse") {
-        const args = JSON.parse(functionCall.args)
-        const structuredResponse = args as GlobalResponse
-
-        // Log token usage
-        logTokenUsage(
-          prompt,
-          JSON.stringify(structuredResponse)
-        )
-        
-        return structuredResponse
-      }
-
-      // If we have a text response but no function call, format it into our structure
-      if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
-        const text = data.candidates[0].content.parts[0].text;
-        
-        // Split the response into sections based on numbered points
-        const sections = text.split(/\d+\./).filter((s: string) => s.trim().length > 0);
-        
-        return {
-          answer: sections[0]?.trim() || text,
-          keyFacts: sections.slice(1).map((s: string) => s.trim()),
-          confidence: "high",
-          sources: [],
-          recommendations: []
+      let webResults: WebSearchResult[] | undefined = undefined
+      if (context.enableWebSearch !== false) {
+        try {
+          webResults = await webSearch(userQuery, context.maxWebResults ?? 5)
+        } catch (searchError) {
+          console.warn("Web search failed, continuing without web results:", searchError)
+          webResults = []
         }
       }
 
-      // Fallback to error message if no valid response
-      const fallbackText = "I apologize, but I could not generate a response at this time."
+      const prompt = buildPrompt.forGlobalChat(
+        userQuery,
+        { userPreferences: context.userPreferences },
+        webResults
+      )
+
+      const data = await callGeminiAPI(prompt, {
+        temperature: 0.7,
+        maxOutputTokens: 2048,
+      })
+
+      console.log("Gemini API response received")
       
+      // Extract text response and parse it into structured format
+      const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text
+      
+      if (textResponse) {
+        // Try to parse the response as JSON if it's structured
+        try {
+          const parsed = JSON.parse(textResponse)
+          if (parsed.answer && parsed.keyFacts && parsed.confidence) {
+            const structuredResponse = parsed as GlobalResponse
+            
+            // Log token usage
+            logTokenUsage(
+              prompt,
+              JSON.stringify(structuredResponse)
+            )
+            
+            return { ...structuredResponse, webResults: webResults || [] }
+          }
+        } catch (parseError) {
+          // If not JSON, extract information from text
+          console.log("Response not in JSON format, parsing manually")
+        }
+        
+        // Manual parsing from text
+        const lines = textResponse.split('\n').filter((line: string) => line.trim())
+        const answer = lines.find((line: string) => !line.includes(':') && line.length > 20) || textResponse
+        const keyFacts = lines.filter((line: string) => line.match(/^\d+\.|\*\s*-/)).slice(0, 5)
+        
+        const structuredResponse: GlobalResponse = {
+          answer: answer.trim(),
+          keyFacts: keyFacts.length > 0 ? keyFacts.map((fact: string) => fact.replace(/^\d+\.\s*|\*\s*-/, '').trim()) : ["Key information extracted from query"],
+          confidence: "high",
+          sources: webResults?.map((r, i) => `${r.source || r.url} (${r.url})`) ?? [],
+          recommendations: [],
+        }
+        
+        return { ...structuredResponse, webResults: webResults || [] }
+      }
+
+      // Fallback response if no textResponse
       return {
-        answer: fallbackText,
+        answer: "I apologize, but I could not generate a response at this time.",
         keyFacts: ["Unable to extract key facts from response"],
         confidence: "low",
         sources: [],
-        recommendations: []
+        recommendations: [],
+        webResults: webResults || []
       }
     } catch (error) {
       console.error("Error calling Gemini API:", error)
-      // Fallback to structured mock response
-      return {
+      return { 
         answer: `That's a great question about ${userQuery.toLowerCase()}. Based on current trends and developments, there are several important considerations to explore.`,
-        keyFacts: [
-          "Current trends are relevant to the query",
-          "Multiple factors need consideration",
-          "Ongoing developments may impact outcomes"
-        ],
-        confidence: "medium",
-        sources: [],
-        recommendations: []
+        keyFacts: [],
+        confidence: 'low',
+        webResults: []
       }
     }
   },
@@ -375,81 +252,47 @@ export const aiUtils = {
   generateNewsAnalysis: async (
     newsContent: string,
     analysisType: 'summary' | 'impact' | 'comprehensive' = 'comprehensive'
-  ): Promise<NewsAnalysis> => {
+  ): Promise<string> => {
     try {
-      const response = await fetch(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=" +
-          process.env.GEMINI_API_KEY,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  {
-                    text: buildPrompt.forNewsAnalysis(newsContent, analysisType),
-                  },
-                ],
-              },
-            ],
-            generationConfig: {
-              temperature: 0.2,
-              topK: 40,
-              topP: 0.95,
-              maxOutputTokens: 2048,
-            },
-            tools: [
-              {
-                functionDeclarations: [
-                  {
-                    name: "getNewsAnalysis",
-                    description: "Generate a structured news analysis",
-                    parameters: STRUCTURED_SCHEMAS.NEWS_ANALYSIS
-                  }
-                ]
-              }
-            ],
-            toolConfig: {
-              functionCallingConfig: {
-                mode: "ANY",
-                allowedFunctionNames: ["getNewsAnalysis"]
-              }
-            }
-          }),
-        },
-      )
+      const prompt = buildPrompt.forNewsAnalysis(newsContent, analysisType)
 
-      if (!response.ok) {
-        throw new Error(`Gemini API error: ${response.status}`)
-      }
+      const data = await callGeminiAPI(prompt, {
+        temperature: 0.2,
+        topK: 40,
+        topP: 0.95,
+        maxOutputTokens: 2048,
+      })
 
-      const data = await response.json()
+      console.log("Gemini API response received")
       
-      // Extract structured response from function call
-      const functionCall = data.candidates?.[0]?.content?.parts?.[0]?.functionCall
-      if (functionCall && functionCall.name === "getNewsAnalysis") {
-        const args = JSON.parse(functionCall.args)
-        return args as NewsAnalysis
-      }
+      const responseText = extractResponseText(data)
 
-      // Fallback response
-      return {
-        headline: "News Analysis",
-        summary: "Unable to generate structured analysis",
-        impact: "Impact assessment unavailable",
-        sentiment: "neutral"
-      }
+      return responseText
     } catch (error) {
       console.error("Error calling Gemini API for news analysis:", error)
-      return {
-        headline: "News Analysis",
-        summary: "Analysis failed due to technical issues",
-        impact: "Impact assessment unavailable",
-        sentiment: "neutral"
-      }
+      return "I apologize, but I could not generate a news analysis at this time due to technical issues."
+    }
+  },
+
+  // Simple direct chat - if you need a basic chat interface
+  simpleChat: async (
+    message: string,
+    context: {
+      temperature?: number;
+      maxTokens?: number;
+    } = {}
+  ): Promise<string> => {
+    try {
+      const data = await callGeminiAPI(message, {
+        temperature: context.temperature || 0.7,
+        maxOutputTokens: context.maxTokens || 2048,
+      })
+
+      const responseText = extractResponseText(data)
+      return responseText
+    } catch (error) {
+      console.error("Error in simple chat:", error)
+      return "I apologize, but I'm having trouble responding right now. Please try again shortly."
     }
   }
 }

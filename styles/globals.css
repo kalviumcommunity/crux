@@ -121,3 +121,23 @@
     @apply bg-background text-foreground;
   }
 }
+
+@keyframes rotate-cw {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes rotate-ccw {
+  from { transform: rotate(360deg); }
+  to { transform: rotate(0deg); }
+}
+.g-spin circle {
+  transform-origin: 120px 120px;
+}
+.g-spin circle:nth-child(1) { animation: rotate-cw 8s linear infinite; }
+.g-spin circle:nth-child(2) { animation: rotate-ccw 8s linear infinite; }
+.g-spin circle:nth-child(3) { animation: rotate-cw 8s linear infinite; }
+.g-spin circle:nth-child(4) { animation: rotate-ccw 8s linear infinite; }
+.g-spin circle:nth-child(5) { animation: rotate-cw 8s linear infinite; }
+.g-spin circle:nth-child(6) { animation: rotate-ccw 8s linear infinite; }
+.g-spin circle:nth-child(2n) { animation-delay: 0.2s; }
+.g-spin circle:nth-child(3n) { animation-delay: 0.3s; }

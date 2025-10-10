@@ -29,12 +29,11 @@ export function Navbar() {
                 src="/CruX%20Logo.png"
                 alt="CruX"
                 fill
-                sizes="32px"
+                sizes="1000px"
                 className="object-contain"
                 priority
               />
             </div>
-            <span className="text-primary-foreground font-bold text-xl tracking-tight">CruX</span>
           </Link>
 
           {/* Navigation Links */}

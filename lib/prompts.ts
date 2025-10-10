@@ -82,6 +82,7 @@ Structured Response Guidelines:
 
   // Prompt for global chat discussions
   GLOBAL_CHAT_PROMPT: `For general news queries:
+- Seamlessly blend retrieved web search results into your response, citing each source with reference numbers [n]
 - Rely on available news data for context
 - START with direct answers, be concise but factual
 - Do not hallucinate - if no reliable information found, respond: "No reliable information available"
@@ -122,13 +123,13 @@ const generateDynamicContext = (context: PromptContext): string => {
     .replace('{currentDate}', context.currentDate)
     .replace('{timeOfDay}', context.timeOfDay)
 
-  const topicContext = context.userPreferences 
+  const topicContext = context.userPreferences
     ? PROMPT_TEMPLATES.TOPIC_FOCUS
         .replace('{topics}', context.userPreferences.topics?.join(', ') || 'General')
         .replace('{readingLevel}', context.userPreferences.readingLevel || 'intermediate')
     : ''
 
-  const articleContext = context.articleMetadata 
+  const articleContext = context.articleMetadata
     ? PROMPT_TEMPLATES.ARTICLE_METADATA
         .replace('{category}', context.articleMetadata.category || 'General')
         .replace('{source}', context.articleMetadata.source || 'Unknown')
@@ -145,7 +146,7 @@ ${articleContext}`.trim()
 const getCurrentContext = (): PromptContext => {
   const now = new Date()
   const hours = now.getHours()
-  
+
   return {
     currentDate: now.toLocaleDateString(),
     timeOfDay: hours < 12 ? 'morning' : hours < 18 ? 'afternoon' : 'evening'
@@ -156,8 +157,8 @@ const getCurrentContext = (): PromptContext => {
 export const buildPrompt = {
   // Build prompt for article context
   forArticleContext: (
-    articleContent: string, 
-    userQuery: string, 
+    articleContent: string,
+    userQuery: string,
     context: Partial<PromptContext> = {}
   ): string => {
     const dynamicContext = generateDynamicContext({
@@ -165,7 +166,7 @@ export const buildPrompt = {
       ...context,
       articleMetadata: {
         ...context.articleMetadata,
-        complexity: context.articleMetadata?.complexity || 
+        complexity: context.articleMetadata?.complexity ||
           Math.min(Math.ceil(articleContent.length / 1000), 10) // Estimate complexity based on length
       }
     })
@@ -174,35 +175,53 @@ export const buildPrompt = {
 ${dynamicContext}
 ${SYSTEM_PROMPTS.ARTICLE_CONTEXT_PROMPT}
 
-IMPORTANT: You must respond using the structured format with the following fields:
+IMPORTANT: You must respond using the structured JSON format with the following fields:
 - answer: Direct response to the user's question
-- keyPoints: 3-5 key points from the article relevant to the query
+- keyPoints: Array of 3-5 key points from the article relevant to the query
 - confidence: 'high', 'medium', or 'low' based on article coverage
-- sourceReferences: Specific quotes or references from the article (if relevant)
-- relatedTopics: Related themes or topics mentioned in the article
+- sourceReferences: Array of specific quotes or references from the article (if relevant)
+- relatedTopics: Array of related themes or topics mentioned in the article
 
 Article Content: "${articleContent.substring(0, 2000)}..."
-User Query: ${userQuery}`
+User Query: ${userQuery}
+
+Please respond with a valid JSON object containing these fields.`
   },
 
   // Build prompt for global chat
   forGlobalChat: (
-    userQuery: string, 
-    context: Partial<PromptContext> = {}
+    userQuery: string,
+    context: Partial<PromptContext> = {},
+    webResults?: Array<{ title: string; snippet: string; url: string; source?: string; publishedAt?: string }>
   ): string => {
     const dynamicContext = generateDynamicContext({
       ...getCurrentContext(),
       ...context
     })
 
-    return `You are CruX, a news-focused AI assistant. Please provide a helpful response to this query: ${userQuery}
+    const webResultsBlock = (webResults && webResults.length)
+      ? `\nRetrieved Web Results (use as factual context; cite with [n] and include sources list):\n${webResults
+          .slice(0, 5)
+          .map((r, i) => `[${i + 1}] Title: ${r.title}\n   Source: ${r.source || ''}\n   URL: ${r.url}\n   Snippet: ${r.snippet}${r.publishedAt ? `\n   Published: ${r.publishedAt}` : ''}`)
+          .join('\n')}`
+      : ''
 
-Please structure your response with:
-1. A clear, direct answer
-2. 2-3 relevant key facts or points
-3. Any important context
+    return `${SYSTEM_PROMPTS.MAIN_PROMPT}
+${dynamicContext}
+${SYSTEM_PROMPTS.GLOBAL_CHAT_PROMPT}
 
-Keep your response factual, specific, and professional.`
+IMPORTANT: You must respond using the structured JSON format with the following fields:
+- answer: Direct response to the user's general news query
+- keyFacts: Array of 3-5 key facts related to the query
+- confidence: 'high', 'medium', or 'low' based on available information
+- sources: Array of relevant sources or references (if any)
+- recommendations: Array of 2-3 follow-up questions or topics
+
+User Query: ${userQuery}
+
+${webResultsBlock}
+
+Please respond with a valid JSON object containing these fields.`
   },
 
   // Build prompt for news analysis
@@ -213,16 +232,18 @@ Keep your response factual, specific, and professional.`
     return `${SYSTEM_PROMPTS.MAIN_PROMPT}
 ${SYSTEM_PROMPTS.NEWS_ANALYSIS_PROMPT}
 
-IMPORTANT: You must respond using the structured format with the following fields:
+IMPORTANT: You must respond using the structured JSON format with the following fields:
 - headline: Main topic or theme of the news
 - summary: Comprehensive but concise summary
 - impact: Assessment of potential impact and significance
-- stakeholders: Key stakeholders or affected parties (if mentioned)
-- timeline: Chronological timeline of key events (if applicable)
+- stakeholders: Array of key stakeholders or affected parties (if mentioned)
+- timeline: Array of key events or timeline (if applicable)
 - sentiment: Overall sentiment ('positive', 'negative', 'neutral', or 'mixed')
 
 Focus on: ${analysisType === 'summary' ? 'headline and summary' : analysisType === 'impact' ? 'impact and stakeholders' : 'comprehensive analysis including all aspects'}
 
-News Content: ${newsContent.substring(0, 3000)}...`
+News Content: ${newsContent.substring(0, 3000)}...
+
+Please respond with a valid JSON object containing these fields.`
   }
 }

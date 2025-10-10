@@ -14,10 +14,12 @@ export async function GET(request: NextRequest) {
 
     if (process.env.NEWS_API_KEY) {
       try {
-        const newsApiUrl = new URL("https://newsapi.org/v2/top-headlines")
-        newsApiUrl.searchParams.set("apiKey", process.env.NEWS_API_KEY)
-        newsApiUrl.searchParams.set("country", "us")
-        newsApiUrl.searchParams.set("pageSize", limit.toString())
+        // Alternative using the 'everything' endpoint
+const newsApiUrl = new URL("https://newsapi.org/v2/everything?")
+newsApiUrl.searchParams.set("apiKey", process.env.NEWS_API_KEY)
+newsApiUrl.searchParams.set("q", "technology OR tech") // Search for these keywords
+newsApiUrl.searchParams.set("language", "en") // Filter by English language
+newsApiUrl.searchParams.set("pageSize", limit.toString())
 
         if (search) {
           newsApiUrl.searchParams.set("q", search)

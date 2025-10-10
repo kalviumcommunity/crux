@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getStopSequences, AICallOptions } from '@/lib/stopSequences'
+import { aiUtils } from '@/lib/ai'
+import { jwtUtils } from '@/lib/jwt'
 
 type AnalysisPrompt = {
   article: {
@@ -11,62 +12,22 @@ type AnalysisPrompt = {
     }
   }
   analysisType?: 'ANALYSIS' | 'CHAIN_OF_THOUGHT' | 'FACT_CHECK' | 'SUMMARY'
-  options?: AICallOptions
-}
-
-const generatePromptWithStops = (
-  article: AnalysisPrompt['article'],
-  analysisType: AnalysisPrompt['analysisType'] = 'CHAIN_OF_THOUGHT'
-) => {
-  const stopSequences = getStopSequences(analysisType)
-  const endMarker = stopSequences[0] // Use first stop sequence as end marker
-
-  return {
-    prompt: `Let's analyze this news article step by step:
-
-1. Initial Understanding:
-   - Article Title: "${article.title}"
-   - Source: ${article.source.name}
-   - Key Points: ${article.description}
-
-2. Context Analysis:
-   - What is the broader context of this news?
-   - What field or domain does this belong to?
-   - Are there any historical precedents?
-
-3. Critical Evaluation:
-   - What are the main claims being made?
-   - What evidence is presented?
-   - Are there potential biases to consider?
-
-4. Impact Assessment:
-   - Who is affected by this news?
-   - What are the immediate implications?
-   - What could be the long-term consequences?
-
-5. Verification Points:
-   - What parts need fact-checking?
-   - Are there multiple sources confirming this?
-   - Any contradicting information?
-
-6. Knowledge Synthesis:
-   - How does this connect to other recent events?
-   - What patterns or trends emerge?
-   - What insights can we draw?
-
-7. Future Implications:
-   - What developments might follow?
-   - What should readers watch for next?
-   - What preventive or preparatory actions might be relevant?
-
-Based on the above framework, let's analyze this specific content:
-${article.content}
-
-Please provide your analysis following this chain of thought structure.`
 }
 
 export async function POST(request: NextRequest) {
   try {
+    // Verify authentication
+    const authHeader = request.headers.get("authorization")
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 })
+    }
+
+    const token = authHeader.substring(7)
+    const user = jwtUtils.verify(token)
+    if (!user) {
+      return NextResponse.json({ error: "Invalid token" }, { status: 401 })
+    }
+
     const body: AnalysisPrompt = await request.json()
 
     if (!body.article || !body.article.content) {
@@ -76,28 +37,31 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { prompt, stopSequences, options } = generatePromptWithStops(
-      body.article,
-      body.analysisType
-    )
-
-    // Merge default options with user-provided options
-    const finalOptions: AICallOptions = {
-      ...options,
-      ...body.options,
-      stopSequences
+    // Map analysis types to our function parameters
+    const analysisTypeMap = {
+      'SUMMARY': 'summary' as const,
+      'ANALYSIS': 'comprehensive' as const,
+      'CHAIN_OF_THOUGHT': 'comprehensive' as const,
+      'FACT_CHECK': 'impact' as const
     }
 
-    // Here you would typically send this to an AI model with the stop sequences
+    const analysisType = analysisTypeMap[body.analysisType || 'ANALYSIS'] || 'comprehensive'
+
+    // Generate AI analysis
+    const analysis = await aiUtils.generateNewsAnalysis(
+      `${body.article.title}\n\n${body.article.description}\n\n${body.article.content}`,
+      analysisType
+    )
+
     return NextResponse.json({
-      prompt,
-      configuration: finalOptions,
-      message: 'Use this prompt with your preferred AI model'
+      analysis,
+      articleTitle: body.article.title,
+      source: body.article.source.name
     })
   } catch (error) {
     console.error('Analysis route error:', error)
     return NextResponse.json(
-      { error: 'Failed to generate analysis prompt' },
+      { error: 'Failed to generate analysis' },
       { status: 500 }
     )
   }

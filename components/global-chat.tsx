@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Send, Bot, User, Loader2, AlertCircle, Sparkles, CheckCircle, AlertTriangle, Info } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { apiLogout } from "@/lib/auth"
+import AILoadingState from "@/components/kokonutui/ai-loading"
 
 interface StructuredResponse {
   answer: string;
@@ -17,6 +18,7 @@ interface StructuredResponse {
   sources?: string[];
   recommendations?: string[];
   confidence: 'high' | 'medium' | 'low';
+  webResults?: Array<{ title: string; snippet: string; url: string; source?: string; publishedAt?: string }>
 }
 
 interface Message {
@@ -192,11 +194,37 @@ export function GlobalChat() {
         {structuredResponse.sources && structuredResponse.sources.length > 0 && (
           <div>
             <h4 className="text-sm font-semibold mb-2 text-foreground">Sources:</h4>
-            <div className="flex flex-wrap gap-1">
-              {structuredResponse.sources.map((source, index) => (
-                <Badge key={index} variant="outline" className="text-xs">
-                  {source}
-                </Badge>
+            <ul className="space-y-1">
+              {structuredResponse.sources.map((source, index) => {
+                const match = source.match(/\((https?:[^)]+)\)/)
+                const url = match?.[1] || undefined
+                const label = source.replace(/\s*\(https?:[^)]+\)\s*$/, '')
+                return (
+                  <li key={index} className="text-sm">
+                    {url ? (
+                      <a href={url} target="_blank" rel="noopener noreferrer" className="text-primary underline">{label}</a>
+                    ) : (
+                      <span className="text-muted-foreground">{label}</span>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        )}
+
+        {structuredResponse.webResults && structuredResponse.webResults.length > 0 && (
+          <div>
+            <h4 className="text-sm font-semibold mb-2 text-foreground">Top results:</h4>
+            <div className="space-y-3">
+              {structuredResponse.webResults.slice(0,3).map((r, i) => (
+                <div key={i} className="p-3 rounded border border-border bg-background">
+                  <a href={r.url} target="_blank" rel="noopener noreferrer" className="font-medium text-primary underline">
+                    {r.title}
+                  </a>
+                  <p className="text-xs text-muted-foreground mt-1">{r.snippet}</p>
+                  <div className="text-[10px] text-muted-foreground mt-1">{r.source} {r.publishedAt ? `• ${new Date(r.publishedAt).toLocaleDateString()}` : ''}</div>
+                </div>
               ))}
             </div>
           </div>
@@ -257,6 +285,7 @@ export function GlobalChat() {
           <h1 className="text-2xl font-bold text-foreground">AI Chat</h1>
         </div>
         <p className="text-muted-foreground">Ask me anything about news, current events, or general topics</p>
+
         {user && <p className="text-sm text-muted-foreground mt-1">Chatting as {user.username}</p>}
       </div>
 
@@ -270,7 +299,10 @@ export function GlobalChat() {
       )}
 
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        {messages.map((message) => (
+        {isLoading ? (
+          <AILoadingState />
+        ) : (
+          messages.map((message) => (
           <div key={message.id} className={`flex gap-4 ${message.sender === "user" ? "justify-end" : "justify-start"}`}>
             {message.sender === "ai" && (
               <div className="w-10 h-10 bg-gradient-to-br from-accent to-accent/80 rounded-full flex items-center justify-center flex-shrink-0">
@@ -294,22 +326,7 @@ export function GlobalChat() {
               </div>
             )}
           </div>
-        ))}
-        {isLoading && (
-          <div className="flex gap-4 justify-start">
-            <div className="w-10 h-10 bg-gradient-to-br from-accent to-accent/80 rounded-full flex items-center justify-center flex-shrink-0">
-              <Bot className="w-5 h-5 text-accent-foreground" />
-            </div>
-            <Card className="bg-muted/50">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span className="animate-pulse">AI is thinking...</span>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
+        )))}
         <div ref={messagesEndRef} />
       </div>
 

@@ -16,14 +16,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid token" }, { status: 401 })
     }
 
-    const { userQuery } = await request.json()
+  const { userQuery, enableWebSearch = true, maxWebResults = 5 } = await request.json()
 
     if (!userQuery) {
       return NextResponse.json({ error: "User query is required" }, { status: 400 })
     }
 
     // Generate AI response
-    const structuredResponse = await aiUtils.generateGlobalResponse(userQuery)
+    const structuredResponse = await aiUtils.generateGlobalResponse(userQuery, {
+      enableWebSearch,
+      maxWebResults
+    })
 
     return NextResponse.json({ 
       response: structuredResponse.answer,

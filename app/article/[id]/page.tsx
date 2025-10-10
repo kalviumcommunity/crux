@@ -18,9 +18,7 @@ interface Article {
 }
 
 interface ArticlePageProps {
-  params: {
-    id: string
-  }
+  params: Promise<{ id: string }>
 }
 
 async function getArticleById(id: string): Promise<Article | null> {
@@ -42,7 +40,7 @@ async function getArticleById(id: string): Promise<Article | null> {
 }
 
 export default async function ArticlePage({ params }: ArticlePageProps) {
-  const { id } = params
+  const { id } = await params
   const article = await getArticleById(id)
 
   if (!article) {
