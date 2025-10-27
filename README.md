@@ -1,5 +1,7 @@
 # CruX - GenAI News App
 
+## [check out the website here](https://crux-news.netlify.app/)
+
 CruX is a modern, AI-powered news application that combines traditional news consumption with advanced AI-driven features for a more engaging and interactive news reading experience.
 
 ## Features

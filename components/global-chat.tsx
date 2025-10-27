@@ -30,7 +30,7 @@ interface Message {
 }
 
 export function GlobalChat() {
-  const { user, token } = useAuth()
+  const { user, token, isLoading: authLoading } = useAuth()
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "1",
@@ -248,7 +248,16 @@ export function GlobalChat() {
     )
   }
 
-  if (!user) {
+  // Early loading state: wait for auth resolution
+  if (authLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-6">
+        <AILoadingState />
+      </div>
+    )
+  }
+
+  if (!user || !token) {
     return (
       <div className="flex flex-col h-full max-w-4xl mx-auto">
         <div className="p-6 border-b border-border bg-gradient-to-r from-primary/5 to-accent/5">

@@ -30,10 +30,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate AI response with article context
+    // aiUtils.generateContextualResponse currently returns a string answer
     const structuredResponse = await aiUtils.generateContextualResponse(article.content, userQuery)
 
     return NextResponse.json({
-      response: structuredResponse.answer,
+      response: structuredResponse,
       structuredResponse,
       articleTitle: article.title,
     })

@@ -1,19 +1,24 @@
-import type { Metadata } from "next"
-import { Navbar } from "@/components/navbar"
-import { GlobalChat } from "@/components/global-chat"
+"use client";
 
-export const metadata: Metadata = {
-  title: "AI Chat - CruX",
-  description: "Chat with AI about news, current events, and any topic you're interested in",
-}
+import { GlobalChat } from "@/components/global-chat";
+import { Sidebar, SidebarBody } from "@/components/ui/sidebar";
+import SidebarContent from "@/components/sidebar-content";
 
 export default function ChatPage() {
   return (
     <div className="min-h-screen bg-background">
-      <Navbar />
-      <main className="pt-16 h-[calc(100vh-4rem)]">
-        <GlobalChat />
-      </main>
+      <Sidebar>
+        <div className="flex h-screen">
+          <SidebarBody className="justify-between gap-10">
+            <SidebarContent />
+          </SidebarBody>
+          <div className="flex-1 overflow-auto">
+            <main className="p-6 h-[calc(100vh-0rem)]">
+              <GlobalChat />
+            </main>
+          </div>
+        </div>
+      </Sidebar>
     </div>
-  )
+  );
 }
